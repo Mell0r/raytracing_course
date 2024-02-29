@@ -3,7 +3,7 @@ use nalgebra::Vector3;
 use crate::geometry::{intersect, Ray};
 use crate::scene::Scene;
 
-fn color_to_pixel(color: Vector3<f32>) -> [u8; 3] {
+fn proportion_to_value(color: Vector3<f32>) -> [u8; 3] {
     [
         (color.x * 255.0).round() as u8,
         (color.y * 255.0).round() as u8,
@@ -29,7 +29,7 @@ pub fn render_scene(scene: &Scene) -> Vec<u8> {
                         + scene.camera.forward_axis,
                 };
 
-                let color = scene
+                let pixel_color = scene
                     .primitives
                     .iter()
                     .filter_map(|primitive| {
@@ -51,7 +51,7 @@ pub fn render_scene(scene: &Scene) -> Vec<u8> {
                     .map(|p| p.1)
                     .unwrap_or(scene.background_color);
 
-                color_to_pixel(color)
+                proportion_to_value(pixel_color)
             })
         })
         .collect()

@@ -48,16 +48,16 @@ pub fn parse_scene(file_content: String) -> Scene {
 
         let parse_vector3 = || {
             Vector3::new(
-                tokens[1].parse::<f32>().expect("Input file format error."),
-                tokens[2].parse::<f32>().expect("Input file format error."),
-                tokens[3].parse::<f32>().expect("Input file format error."),
+                tokens[1].parse().expect("Input file format error."),
+                tokens[2].parse().expect("Input file format error."),
+                tokens[3].parse().expect("Input file format error."),
             )
         };
 
         match tokens[0].as_str() {
             "DIMENSIONS" => {
-                width = Some(tokens[1].parse::<u32>().expect("Input file format error."));
-                height = Some(tokens[2].parse::<u32>().expect("Input file format error."));
+                width = Some(tokens[1].parse().expect("Input file format error."));
+                height = Some(tokens[2].parse().expect("Input file format error."));
             }
             "BG_COLOR" => {
                 background_color = Some(parse_vector3());
@@ -75,15 +75,15 @@ pub fn parse_scene(file_content: String) -> Scene {
                 forward_axis = Some(parse_vector3());
             }
             "CAMERA_FOV_X" => {
-                fov_x = Some(tokens[1].parse::<f32>().expect("Input file format error."));
+                fov_x = Some(tokens[1].parse().expect("Input file format error."));
             }
             "NEW_PRIMITIVE" => primitives.push(Primitive {
                 shape: Shape::Plane {
-                    normal: Vector3::new(1.0, 1.0, 1.0),
+                    normal: Default::default(),
                 },
-                color: Vector3::new(0.0, 0.0, 0.0),
-                position: Vector3::new(0.0, 0.0, 0.0),
-                rotation: UnitQuaternion::new_normalize(Quaternion::new(0.0, 0.0, 0.0, 1.0)),
+                color: Default::default(),
+                position: Default::default(),
+                rotation: Default::default(),
             }),
             "PLANE" => {
                 primitives
@@ -116,10 +116,10 @@ pub fn parse_scene(file_content: String) -> Scene {
                     .last_mut()
                     .expect("Input file format error.")
                     .rotation = UnitQuaternion::new_normalize(Quaternion::new(
-                    tokens[4].parse::<f32>().expect("Input file format error."),
-                    tokens[1].parse::<f32>().expect("Input file format error."),
-                    tokens[2].parse::<f32>().expect("Input file format error."),
-                    tokens[3].parse::<f32>().expect("Input file format error."),
+                    tokens[4].parse().expect("Input file format error."),
+                    tokens[1].parse().expect("Input file format error."),
+                    tokens[2].parse().expect("Input file format error."),
+                    tokens[3].parse().expect("Input file format error."),
                 ))
             }
             "COLOR" => {
