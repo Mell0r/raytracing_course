@@ -52,7 +52,7 @@ pub fn get_light_characteristic_to_point(
             attenuation,
         } => {
             let direction_to_light = position - point;
-            let r = direction_to_light.len() as f64;
+            let r = direction_to_light.norm() as f64;
             (
                 direction_to_light,
                 light.intensity / (attenuation.x + attenuation.y * r + attenuation.z * r * r),
