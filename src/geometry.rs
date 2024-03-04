@@ -13,7 +13,7 @@ pub struct Ray {
     pub direction: Vector3<f64>,
 }
 
-const EPS: f64 = 0.00001;
+const EPS: f64 = 0.0001;
 
 pub fn build_shifted_ray(point: Vector3<f64>, direction: Vector3<f64>) -> Ray {
     Ray {
@@ -53,7 +53,7 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
     match shape {
         Shape::Plane { normal } => {
             let div = ray.direction.dot(normal);
-            if div == 0.0 {
+            if div.abs() <= 0.00001 {
                 return None;
             };
             let t = -ray.point.dot(normal) / div;
@@ -64,7 +64,7 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
                 let normal_conjugated = if outside { *normal } else { -normal };
                 Some(Intersection {
                     t,
-                    normal: normal_conjugated,
+                    normal: normal_conjugated.normalize(),
                     outside: outside,
                 })
             }
@@ -79,17 +79,16 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
             )
             .and_then(|p| {
                 if p.0 >= 0.0 {
-                    Some(p.0)
+                    Some((p.0, true))
                 } else if p.1 >= 0.0 {
-                    Some(p.1)
+                    Some((p.1, false))
                 } else {
                     None
                 }
             })
-            .map(|t| {
+            .map(|(t, outside)| {
                 let p = ray.point + ray.direction * t;
-                let mut normal = p.component_div(r).normalize();
-                let outside = normal.dot(&ray.direction.normalize()) < 0.0;
+                let mut normal = p.component_div(r).component_div(r).normalize();
                 if !outside {
                     normal = -normal;
                 }
