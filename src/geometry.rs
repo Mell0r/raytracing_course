@@ -79,20 +79,25 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
             )
             .and_then(|p| {
                 if p.0 >= 0.0 {
-                    Some((p.0, true))
+                    Some(p.0)
                 } else if p.1 >= 0.0 {
-                    Some((p.1, false))
+                    Some(p.1)
                 } else {
                     None
                 }
             })
-            .map(|(t, outside)| {
+            .map(|t| {
                 let p = ray.point + ray.direction * t;
-                let normal = if outside {
-                    p.component_div(r).normalize()
-                } else {
-                    -p.component_div(r).normalize()
-                };
+                let mut normal = p.component_div(r).normalize();
+                let outside = normal.dot(&ray.direction.normalize()) < 0.0;
+                if !outside {
+                    normal = -normal;
+                }
+                assert!(
+                    normal.dot(&ray.direction.normalize()) < 0.1,
+                    "{}",
+                    normal.dot(&ray.direction.normalize())
+                );
                 Intersection { t, normal, outside }
             })
         }
