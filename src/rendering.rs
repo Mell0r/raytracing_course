@@ -35,7 +35,7 @@ fn proportion_to_value(color: Vector3<f64>) -> [u8; 3] {
 }
 
 fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
-    if depth > scene.ray_depth {
+    if depth >= scene.ray_depth {
         return BLACK;
     }
 
@@ -83,7 +83,8 @@ fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
                         (*ior, 1.0)
                     };
                     let normalized_ray_direction = ray.direction.normalize();
-                    let cos_tetta_1 = f64::clamp(-intersection.normal.dot(&normalized_ray_direction), 0.0, 1.0);
+                    // let cos_tetta_1 = -intersection.normal.dot(&normalized_ray_direction);
+                    let cos_tetta_1 = -intersection.normal.dot(&normalized_ray_direction);
                     let sin_tetta_2 = nu_1 / nu_2 * (1.0 - cos_tetta_1.powi(2)).sqrt();
                     let cos_tetta_2 = (1.0 - sin_tetta_2.powi(2)).sqrt();
                     // if cos_tetta_1 < 0.0 {
