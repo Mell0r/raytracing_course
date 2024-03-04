@@ -1,25 +1,140 @@
 use nalgebra::Vector3;
 
-use crate::geometry::{intersect, Ray};
-use crate::scene::Scene;
+use crate::geometry::{build_shifted_ray, intersect_scene, Ray};
+use crate::scene::{self, get_light_characteristic_to_point, Scene};
 
-fn proportion_to_value(color: Vector3<f32>) -> [u8; 3] {
+const BLACK: Vector3<f64> = Vector3::<f64>::new(0.0, 0.0, 0.0);
+
+// fn saturate(color: Vector3<f64>) -> Vector3<f64> {
+//     Vector3::<f64>::new(
+//         f64::clamp(color.x, 0.0, 1.1),
+//         f64::clamp(color.y, 0.0, 1.1),
+//         f64::clamp(color.z, 0.0, 1.1),
+//     )
+// }
+
+fn aces_tonemap(x: f64) -> f64 {
+    const A: f64 = 2.51;
+    const B: f64 = 0.03;
+    const C: f64 = 2.43;
+    const D: f64 = 0.59;
+    const E: f64 = 0.14;
+
+    f64::clamp(x * (A * x + B) / (x * (C * x + D) + E), 0.0, 1.1)
+}
+
+fn proportion_to_value(color: Vector3<f64>) -> [u8; 3] {
     [
-        (color.x * 255.0).round() as u8,
-        (color.y * 255.0).round() as u8,
-        (color.z * 255.0).round() as u8,
+        (aces_tonemap(color.x).powf(1.0 / 2.2) * 255.0).round() as u8,
+        (aces_tonemap(color.y).powf(1.0 / 2.2) * 255.0).round() as u8,
+        (aces_tonemap(color.z).powf(1.0 / 2.2) * 255.0).round() as u8,
+        // (color.x * 255.0).round() as u8,
+        // (color.y * 255.0).round() as u8,
+        // (color.z * 255.0).round() as u8,
     ]
+}
+
+fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
+    if depth >= scene.ray_depth {
+        return BLACK;
+    }
+
+    intersect_scene(&ray, scene, None)
+        .map(|(intersection, primitive)| {
+            let intersection_point = ray.point + ray.direction * intersection.t;
+            match &primitive.material {
+                scene::Material::DIFFUSE => {
+                    primitive.color.component_mul(&scene.lights.iter().fold(
+                        scene.ambient_light,
+                        |sum: Vector3<f64>, light| {
+                            let (light_direction, intensity, distance) =
+                            get_light_characteristic_to_point(&light, &intersection_point);
+
+                            if let Some(_) = intersect_scene(
+                                &build_shifted_ray(intersection_point, light_direction),
+                                scene,
+                                distance,
+                            ) {
+                                return sum;
+                            };
+
+                            let mult: f64 = light_direction.normalize().dot(&intersection.normal);
+                            if mult < 0.0 {
+                                sum
+                            } else {
+                                sum + mult * intensity
+                            }
+                        },
+                    ))
+                }
+                scene::Material::METALLIC => {
+                    let reflected_direction = ray.direction
+                        - 2.0 * intersection.normal.dot(&ray.direction) * intersection.normal;
+                    primitive.color.component_mul(&get_pixel_color(
+                        scene,
+                        &build_shifted_ray(intersection_point, reflected_direction),
+                        depth + 1,
+                    ))
+                }
+                scene::Material::DIELECTRIC { ior } => {
+                    let (nu_1, nu_2): (f64, f64) = if intersection.outside {
+                        (1.0, *ior)
+                    } else {
+                        (*ior, 1.0)
+                    };
+                    let normalized_ray_direction = ray.direction.normalize();
+                    let cos_tetta_1 = -intersection.normal.dot(&normalized_ray_direction);
+                    let sin_tetta_2 = nu_1 / nu_2 * (1.0 - cos_tetta_1.powi(2)).sqrt();
+                    let cos_tetta_2 = (1.0 - sin_tetta_2.powi(2)).sqrt();
+                    assert!(
+                        cos_tetta_1 >= 0.0,
+                        "cos_tetta_1 = {}, normal = {:?}",
+                        cos_tetta_1,
+                        intersection.normal.norm()
+                    );
+                    // assert!(sin_tetta_2.abs() >= 0.0 || sin_tetta_2.abs() > 1.0);
+                    let r_0 = ((nu_1 - nu_2) / (nu_1 + nu_2)).powi(2);
+                    let reflected_coef = r_0 + (1.0 - r_0) * (1.0 - cos_tetta_1).powi(5);
+                    let reflected_dir =
+                        normalized_ray_direction + 2.0 * cos_tetta_1 * intersection.normal;
+                    let reflected_color = get_pixel_color(
+                        scene,
+                        &build_shifted_ray(intersection_point, reflected_dir),
+                        depth + 1,
+                    );
+                    if sin_tetta_2 <= 1.0 {
+                        let refracted_dir = nu_1 / nu_2 * normalized_ray_direction
+                            + (nu_1 / nu_2 * cos_tetta_1 - cos_tetta_2) * intersection.normal;
+                        let refracted_coef = 1.0 - reflected_coef;
+                        let refracted_color = get_pixel_color(
+                            scene,
+                            &build_shifted_ray(intersection_point, refracted_dir),
+                            depth + 1,
+                        );
+                        if intersection.outside {
+                            reflected_coef * reflected_color
+                                + refracted_coef * refracted_color.component_mul(&primitive.color)
+                        } else {
+                            reflected_coef * reflected_color + refracted_coef * refracted_color
+                        }
+                    } else {
+                        reflected_color
+                    }
+                }
+            }
+        })
+        .unwrap_or(scene.background_color)
 }
 
 pub fn render_scene(scene: &Scene) -> Vec<u8> {
     (0..scene.height)
         .flat_map(move |row| {
             (0..scene.width).flat_map(move |column| {
-                let x_local = column as f32 + 0.5;
-                let y_local = row as f32 + 0.5;
+                let x_local = column as f64 + 0.5;
+                let y_local = row as f64 + 0.5;
                 let x_global =
-                    (2.0 * x_local / scene.width as f32 - 1.0) * (scene.camera.fov_x / 2.0).tan();
-                let y_global = (2.0 * y_local / scene.height as f32 - 1.0)
+                    (2.0 * x_local / scene.width as f64 - 1.0) * (scene.camera.fov_x / 2.0).tan();
+                let y_global = (2.0 * y_local / scene.height as f64 - 1.0)
                     * (scene.camera.fov_y / 2.0).tan()
                     * (-1.0); // to reverse y asix
                 let ray = Ray {
@@ -29,27 +144,7 @@ pub fn render_scene(scene: &Scene) -> Vec<u8> {
                         + scene.camera.forward_axis,
                 };
 
-                let pixel_color = scene
-                    .primitives
-                    .iter()
-                    .filter_map(|primitive| {
-                        let moved_ray_point = ray.point - primitive.position;
-                        let ray_to_intersect = Ray {
-                            point: primitive
-                                .rotation
-                                .conjugate()
-                                .transform_vector(&moved_ray_point),
-                            direction: primitive
-                                .rotation
-                                .conjugate()
-                                .transform_vector(&ray.direction),
-                        };
-                        intersect(&ray_to_intersect, &primitive.shape)
-                            .map(|intersection| (intersection, primitive.color.clone()))
-                    })
-                    .min_by(|x, y| x.0.partial_cmp(&y.0).expect("Nan on intersection."))
-                    .map(|p| p.1)
-                    .unwrap_or(scene.background_color);
+                let pixel_color = get_pixel_color(scene, &ray, 0);
 
                 proportion_to_value(pixel_color)
             })
