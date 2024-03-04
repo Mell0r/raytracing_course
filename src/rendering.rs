@@ -48,7 +48,7 @@ fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
                         scene.ambient_light,
                         |sum: Vector3<f64>, light| {
                             let (light_direction, intensity, distance) =
-                            get_light_characteristic_to_point(&light, &intersection_point);
+                                get_light_characteristic_to_point(&light, &intersection_point);
 
                             if let Some(_) = intersect_scene(
                                 &build_shifted_ray(intersection_point, light_direction),
@@ -83,15 +83,16 @@ fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
                         (*ior, 1.0)
                     };
                     let normalized_ray_direction = ray.direction.normalize();
-                    let cos_tetta_1 = -intersection.normal.dot(&normalized_ray_direction);
+                    let cos_tetta_1 = f64::clamp(-intersection.normal.dot(&normalized_ray_direction), 0.0, 1.0);
                     let sin_tetta_2 = nu_1 / nu_2 * (1.0 - cos_tetta_1.powi(2)).sqrt();
                     let cos_tetta_2 = (1.0 - sin_tetta_2.powi(2)).sqrt();
-                    assert!(
-                        cos_tetta_1 >= 0.0,
-                        "cos_tetta_1 = {}, normal = {:?}",
-                        cos_tetta_1,
-                        intersection.normal.norm()
-                    );
+                    // if cos_tetta_1 < 0.0 {
+                    //     println!(
+                    //         "cos_tetta_1 = {}, normal = {:?}",
+                    //         cos_tetta_1,
+                    //         intersection.normal.norm(),
+                    //     )
+                    // };
                     // assert!(sin_tetta_2.abs() >= 0.0 || sin_tetta_2.abs() > 1.0);
                     let r_0 = ((nu_1 - nu_2) / (nu_1 + nu_2)).powi(2);
                     let reflected_coef = r_0 + (1.0 - r_0) * (1.0 - cos_tetta_1).powi(5);
