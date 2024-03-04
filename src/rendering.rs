@@ -35,7 +35,7 @@ fn proportion_to_value(color: Vector3<f64>) -> [u8; 3] {
 }
 
 fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
-    if depth >= scene.ray_depth {
+    if depth > scene.ray_depth {
         return BLACK;
     }
 
