@@ -1,4 +1,5 @@
 use nalgebra::Vector3;
+use rand::Rng;
 
 use crate::scene::{Primitive, Scene};
 
@@ -174,4 +175,21 @@ pub fn intersect_scene<'a>(
                 Some((intersection, primitive))
             }
         })
+}
+
+pub fn generate_random_unit_direction(normal: &Vector3<f64>) -> Vector3<f64> {
+    let mut rng = rand::thread_rng();
+    let direction = Vector3::<f64>::new(
+        rng.gen_range(-1.0..1.0),
+        rng.gen_range(-1.0..1.0),
+        rng.gen_range(-1.0..1.0),
+    );
+    if direction.norm() > 1.0 {
+        generate_random_unit_direction(normal)
+    }
+    else if direction.dot(normal) < 0.0 {
+        -direction.normalize()
+    } else {
+        direction.normalize()
+    }
 }

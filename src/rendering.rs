@@ -1,6 +1,7 @@
 use nalgebra::Vector3;
+use rand::Rng;
 
-use crate::geometry::{build_shifted_ray, intersect_scene, Ray};
+use crate::geometry::{build_shifted_ray, generate_random_unit_direction, intersect_scene, Ray};
 use crate::scene::{self, get_light_characteristic_to_point, Scene};
 
 const BLACK: Vector3<f64> = Vector3::<f64>::new(0.0, 0.0, 0.0);
@@ -34,7 +35,7 @@ fn proportion_to_value(color: Vector3<f64>) -> [u8; 3] {
     ]
 }
 
-fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
+fn get_ray_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
     if depth >= scene.ray_depth {
         return BLACK;
     }
@@ -44,33 +45,42 @@ fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
             let intersection_point = ray.point + ray.direction * intersection.t;
             match &primitive.material {
                 scene::Material::DIFFUSE => {
-                    primitive.color.component_mul(&scene.lights.iter().fold(
-                        scene.ambient_light,
-                        |sum: Vector3<f64>, light| {
-                            let (light_direction, intensity, distance) =
-                                get_light_characteristic_to_point(&light, &intersection_point);
+                    // primitive.color.component_mul(&scene.lights.iter().fold(
+                    //     scene.ambient_light,
+                    //     |sum: Vector3<f64>, light| {
+                    //         let (light_direction, intensity, distance) =
+                    //             get_light_characteristic_to_point(&light, &intersection_point);
 
-                            if let Some(_) = intersect_scene(
-                                &build_shifted_ray(intersection_point, light_direction),
-                                scene,
-                                distance,
-                            ) {
-                                return sum;
-                            };
+                    //         if let Some(_) = intersect_scene(
+                    //             &build_shifted_ray(intersection_point, light_direction),
+                    //             scene,
+                    //             distance,
+                    //         ) {
+                    //             return sum;
+                    //         };
 
-                            let mult: f64 = light_direction.normalize().dot(&intersection.normal);
-                            if mult < 0.0 {
-                                sum
-                            } else {
-                                sum + mult * intensity
-                            }
-                        },
-                    ))
+                    //         let mult: f64 = light_direction.normalize().dot(&intersection.normal);
+                    //         if mult < 0.0 {
+                    //             sum
+                    //         } else {
+                    //             sum + mult * intensity
+                    //         }
+                    //     },
+                    // ))
+
+                    let rand_dir = generate_random_unit_direction(&intersection.normal);
+                    primitive.emission
+                        + primitive.color.component_mul(&get_ray_color(
+                            &scene,
+                            &build_shifted_ray(intersection_point, rand_dir),
+                            depth + 1,
+                        )) * rand_dir.dot(&intersection.normal)
+                            * 2.0
                 }
                 scene::Material::METALLIC => {
                     let reflected_direction = ray.direction
                         - 2.0 * intersection.normal.dot(&ray.direction) * intersection.normal;
-                    primitive.color.component_mul(&get_pixel_color(
+                    primitive.color.component_mul(&get_ray_color(
                         scene,
                         &build_shifted_ray(intersection_point, reflected_direction),
                         depth + 1,
@@ -86,38 +96,28 @@ fn get_pixel_color(scene: &Scene, ray: &Ray, depth: u32) -> Vector3<f64> {
                     // let cos_tetta_1 = -intersection.normal.dot(&normalized_ray_direction);
                     let cos_tetta_1 = -intersection.normal.dot(&normalized_ray_direction);
                     let sin_tetta_2 = nu_1 / nu_2 * (1.0 - cos_tetta_1.powi(2)).sqrt();
-                    let cos_tetta_2 = (1.0 - sin_tetta_2.powi(2)).sqrt();
-                    // if cos_tetta_1 < 0.0 {
-                    //     println!(
-                    //         "cos_tetta_1 = {}, normal = {:?}",
-                    //         cos_tetta_1,
-                    //         intersection.normal.norm(),
-                    //     )
-                    // };
-                    // assert!(sin_tetta_2.abs() >= 0.0 || sin_tetta_2.abs() > 1.0);
-                    let r_0 = ((nu_1 - nu_2) / (nu_1 + nu_2)).powi(2);
-                    let reflected_coef = r_0 + (1.0 - r_0) * (1.0 - cos_tetta_1).powi(5);
                     let reflected_dir =
                         normalized_ray_direction + 2.0 * cos_tetta_1 * intersection.normal;
-                    let reflected_color = get_pixel_color(
+                    let r_0 = ((nu_1 - nu_2) / (nu_1 + nu_2)).powi(2);
+                    let reflected_coef = r_0 + (1.0 - r_0) * (1.0 - cos_tetta_1).powi(5);
+                    let reflected_color = get_ray_color(
                         scene,
                         &build_shifted_ray(intersection_point, reflected_dir),
                         depth + 1,
                     );
-                    if sin_tetta_2 <= 1.0 {
+                    if sin_tetta_2 <= 1.0 && rand::thread_rng().gen::<f64>() > reflected_coef {
+                        let cos_tetta_2 = (1.0 - sin_tetta_2.powi(2)).sqrt();
                         let refracted_dir = nu_1 / nu_2 * normalized_ray_direction
                             + (nu_1 / nu_2 * cos_tetta_1 - cos_tetta_2) * intersection.normal;
-                        let refracted_coef = 1.0 - reflected_coef;
-                        let refracted_color = get_pixel_color(
+                        let refracted_color = get_ray_color(
                             scene,
                             &build_shifted_ray(intersection_point, refracted_dir),
                             depth + 1,
                         );
                         if intersection.outside {
-                            reflected_coef * reflected_color
-                                + refracted_coef * refracted_color.component_mul(&primitive.color)
+                            refracted_color.component_mul(&primitive.color)
                         } else {
-                            reflected_coef * reflected_color + refracted_coef * refracted_color
+                            refracted_color
                         }
                     } else {
                         reflected_color
@@ -146,9 +146,13 @@ pub fn render_scene(scene: &Scene) -> Vec<u8> {
                         + scene.camera.forward_axis,
                 };
 
-                let pixel_color = get_pixel_color(scene, &ray, 0);
+                let mut sum_pixel_color: Vector3<f64> = Default::default();
+                for _ in 0..scene.samples {
+                    sum_pixel_color += get_ray_color(scene, &ray, 0);
+                }
+                sum_pixel_color /= scene.samples as f64;
 
-                proportion_to_value(pixel_color)
+                proportion_to_value(sum_pixel_color)
             })
         })
         .collect()

@@ -25,6 +25,7 @@ pub struct Primitive {
     pub position: Vector3<f64>,
     pub rotation: UnitQuaternion<f64>,
     pub material: Material,
+    pub emission: Vector3<f64>,
 }
 
 pub enum LightType {
@@ -72,6 +73,7 @@ pub struct Scene {
     pub ray_depth: u32,
     pub ambient_light: Vector3<f64>,
     pub lights: Vec<Light>,
+    pub samples: u32,
 }
 
 pub fn parse_scene(file_content: String) -> Scene {
@@ -85,8 +87,9 @@ pub fn parse_scene(file_content: String) -> Scene {
     let mut fov_x: Option<f64> = None;
     let mut primitives: Vec<Primitive> = vec![];
     let mut ray_depth: Option<u32> = None;
-    let mut ambient_light: Option<Vector3<f64>> = None;
+    let mut ambient_light: Option<Vector3<f64>> = Some(Default::default());
     let mut lights: Vec<Light> = vec![];
+    let mut samples: Option<u32> = None;
 
     for line in file_content.lines() {
         let tokens: Vec<String> = line.split_whitespace().map(|s| s.to_string()).collect();
@@ -122,6 +125,7 @@ pub fn parse_scene(file_content: String) -> Scene {
                 position: Default::default(),
                 rotation: Default::default(),
                 material: Material::DIFFUSE,
+                emission: Default::default(),
             }),
             "PLANE" => {
                 primitives
@@ -239,6 +243,13 @@ pub fn parse_scene(file_content: String) -> Scene {
                         },
                     }
             }
+            "SAMPLES" => samples = Some(tokens[1].parse().expect("Input file format error.")),
+            "EMISSION" => {
+                primitives
+                    .last_mut()
+                    .expect("Input file format error.")
+                    .emission = parse_vector3()
+            }
             _ => {}
         }
     }
@@ -264,5 +275,6 @@ pub fn parse_scene(file_content: String) -> Scene {
         ray_depth: ray_depth.expect("Ray depth is not specified in input file."),
         ambient_light: ambient_light.expect("Ambient light is not specified in input file."),
         lights,
+        samples: samples.expect("Samples number is not specified in input file.")
     }
 }
