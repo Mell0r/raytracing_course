@@ -1,6 +1,8 @@
 mod geometry;
 mod rendering;
 mod scene;
+mod distribution;
+
 extern crate nalgebra as na;
 use std::env;
 use std::fs;
