@@ -1,8 +1,8 @@
 use nalgebra::Vector3;
-use rand::Rng;
 
 use crate::scene::{Primitive, Scene};
 
+#[derive(Clone)]
 pub enum Shape {
     Plane { normal: Vector3<f64> },
     Ellipsoid { r: Vector3<f64> },
@@ -35,8 +35,8 @@ fn solve_quadratic_equation(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
 }
 
 pub struct Intersection {
-    pub t: f64,
-    pub normal: Vector3<f64>,
+    pub ts: Vec<f64>,
+    pub normals: Vec<Vector3<f64>>,
     pub outside: bool,
 }
 
@@ -64,9 +64,9 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
                 let outside = ray.direction.dot(normal) < 0.0;
                 let normal_conjugated = if outside { *normal } else { -normal };
                 Some(Intersection {
-                    t,
-                    normal: normal_conjugated.normalize(),
-                    outside: outside,
+                    ts: vec![t],
+                    normals: vec![normal_conjugated.normalize()],
+                    outside,
                 })
             }
         }
@@ -80,25 +80,28 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
             )
             .and_then(|p| {
                 if p.0 >= 0.0 {
-                    Some((p.0, true))
+                    Some((vec![p.0, p.1], true))
                 } else if p.1 >= 0.0 {
-                    Some((p.1, false))
+                    Some((vec![p.1], false))
                 } else {
                     None
                 }
             })
-            .map(|(t, outside)| {
-                let p = ray.point + ray.direction * t;
-                let mut normal = p.component_div(r).component_div(r).normalize();
-                if !outside {
-                    normal = -normal;
-                }
-                assert!(
-                    normal.dot(&ray.direction.normalize()) < 0.1,
-                    "{}",
-                    normal.dot(&ray.direction.normalize())
-                );
-                Intersection { t, normal, outside }
+            .map(|(ts, outside)| Intersection {
+                ts: ts.clone(),
+                normals: ts
+                    .iter()
+                    .map(|&t| {
+                        let p = ray.point + ray.direction * t;
+                        let normal = p.component_div(r).component_div(r).normalize();
+                        if outside {
+                            normal
+                        } else {
+                            -normal
+                        }
+                    })
+                    .collect(),
+                outside,
             })
         }
         Shape::Box { s } => {
@@ -115,18 +118,24 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
             if t0 > t1 || t1 < 0.0 {
                 None
             } else if t0 >= 0.0 {
-                Some((t0, true))
+                Some((vec![t0, t1], true))
             } else {
-                Some((t1, false))
+                Some((vec![t1], false))
             }
-            .map(|(t, outside)| {
-                let p = ray.point + ray.direction * t;
-                let normal = if outside {
-                    normalize(p.component_div(s))
-                } else {
-                    -normalize(p.component_div(s))
-                };
-                Intersection { t, normal, outside }
+            .map(|(ts, outside)| Intersection {
+                ts: ts.clone(),
+                normals: ts
+                    .iter()
+                    .map(|&t| {
+                        let p = ray.point + ray.direction * t;
+                        if outside {
+                            normalize(p.component_div(s))
+                        } else {
+                            -normalize(p.component_div(s))
+                        }
+                    })
+                    .collect(),
+                outside,
             })
         }
     }
@@ -155,18 +164,26 @@ pub fn intersect_scene<'a>(
             intersect_shape(&ray_to_intersect, &primitive.shape).map(|intersection| {
                 (
                     Intersection {
-                        t: intersection.t,
-                        normal: primitive.rotation.transform_vector(&intersection.normal),
+                        ts: intersection.ts,
+                        normals: intersection
+                            .normals
+                            .iter()
+                            .map(|&normal| primitive.rotation.transform_vector(&normal))
+                            .collect(),
                         outside: intersection.outside,
                     },
                     primitive,
                 )
             })
         })
-        .min_by(|x, y| x.0.t.partial_cmp(&y.0.t).expect("Nan on intersection."))
+        .min_by(|x, y| {
+            x.0.ts[0]
+                .partial_cmp(&y.0.ts[0])
+                .expect("Nan on intersection.")
+        })
         .and_then(|(intersection, primitive)| {
             if let Some(val) = distance_cap {
-                if intersection.t * ray.direction.norm() > val {
+                if intersection.ts[0] * ray.direction.norm() > val {
                     None
                 } else {
                     Some((intersection, primitive))
@@ -175,21 +192,4 @@ pub fn intersect_scene<'a>(
                 Some((intersection, primitive))
             }
         })
-}
-
-pub fn generate_random_unit_direction(normal: &Vector3<f64>) -> Vector3<f64> {
-    let mut rng = rand::thread_rng();
-    let direction = Vector3::<f64>::new(
-        rng.gen_range(-1.0..1.0),
-        rng.gen_range(-1.0..1.0),
-        rng.gen_range(-1.0..1.0),
-    );
-    if direction.norm() > 1.0 {
-        generate_random_unit_direction(normal)
-    }
-    else if direction.dot(normal) < 0.0 {
-        -direction.normalize()
-    } else {
-        direction.normalize()
-    }
 }
