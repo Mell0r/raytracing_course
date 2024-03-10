@@ -1,15 +1,15 @@
 use std::{f64::consts::PI, iter::zip};
 
 use nalgebra::Vector3;
-use rand::{seq::SliceRandom, Rng};
+use rand::{rngs::ThreadRng, seq::SliceRandom, Rng};
 
 use crate::{
-    geometry::{build_shifted_ray, intersect_shape, Ray, Shape},
+    geometry::{intersect_shape, Ray, Shape},
     scene::Primitive,
 };
 
 pub trait DistributionTooling {
-    fn sample(&self, point_from: &Vector3<f64>, normal_from: &Vector3<f64>) -> Vector3<f64>;
+    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, normal_from: &Vector3<f64>) -> Vector3<f64>;
     fn pdf(
         &self,
         point_from: &Vector3<f64>,
@@ -21,15 +21,14 @@ pub trait DistributionTooling {
 pub struct CosineWeightedDistr {}
 
 impl DistributionTooling for CosineWeightedDistr {
-    fn sample(&self, point_from: &Vector3<f64>, normal_from: &Vector3<f64>) -> Vector3<f64> {
-        let mut rng = rand::thread_rng();
+    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, normal_from: &Vector3<f64>) -> Vector3<f64> {
         let direction = Vector3::<f64>::new(
             rng.gen_range(-1.0..1.0),
             rng.gen_range(-1.0..1.0),
             rng.gen_range(-1.0..1.0),
         );
         if direction.norm() > 1.0 {
-            self.sample(point_from, normal_from)
+            self.sample(rng, point_from, normal_from)
         } else {
             (direction.normalize() + normal_from).normalize()
         }
@@ -45,15 +44,14 @@ impl DistributionTooling for CosineWeightedDistr {
     }
 }
 
-pub fn generate_unit_on_sphere() -> Vector3<f64> {
-    let mut rng = rand::thread_rng();
+pub fn generate_unit_on_sphere(rng: &mut ThreadRng) -> Vector3<f64> {
     let direction = Vector3::<f64>::new(
         rng.gen_range(-1.0..1.0),
         rng.gen_range(-1.0..1.0),
         rng.gen_range(-1.0..1.0),
     );
     if direction.norm() > 1.0 {
-        generate_unit_on_sphere()
+        generate_unit_on_sphere(rng)
     } else {
         direction.normalize()
     }
@@ -64,13 +62,12 @@ pub struct LightSourceDistr {
 }
 
 impl DistributionTooling for LightSourceDistr {
-    fn sample(&self, point_from: &Vector3<f64>, _normal_from: &Vector3<f64>) -> Vector3<f64> {
-        let generate_rand_local_point = || -> Vector3<f64> {
+    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, _normal_from: &Vector3<f64>) -> Vector3<f64> {
+        let mut generate_rand_local_point = || -> Vector3<f64> {
             match self.primitive.shape {
                 Shape::Plane { normal: _ } => Default::default(),
 
                 Shape::Box { s } => {
-                    let mut rng = rand::thread_rng();
                     let w_x = 4.0 * s.y * s.z;
                     let w_y = 4.0 * s.x * s.z;
                     let w_z = 4.0 * s.x * s.y;
@@ -87,7 +84,7 @@ impl DistributionTooling for LightSourceDistr {
                     }
                 }
 
-                Shape::Ellipsoid { r } => generate_unit_on_sphere().component_mul(&r),
+                Shape::Ellipsoid { r } => generate_unit_on_sphere(rng).component_mul(&r),
             }
         };
 
@@ -159,11 +156,11 @@ pub struct MixDistr {
 }
 
 impl DistributionTooling for MixDistr {
-    fn sample(&self, point_from: &Vector3<f64>, normal: &Vector3<f64>) -> Vector3<f64> {
+    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, normal: &Vector3<f64>) -> Vector3<f64> {
         self.distribs
-            .choose(&mut rand::thread_rng())
+            .choose(rng)
             .expect("Empty distribution vector in mixed distribution.")
-            .sample(point_from, normal)
+            .sample(rng, point_from, normal)
     }
 
     fn pdf(&self, point_from: &Vector3<f64>, normal: &Vector3<f64>, dir: &Vector3<f64>) -> f64 {

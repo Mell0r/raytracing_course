@@ -1,6 +1,7 @@
 use std::f64::consts::PI;
 
 use nalgebra::Vector3;
+use rand::rngs::ThreadRng;
 use rand::Rng;
 
 use crate::distribution::CosineWeightedDistr;
@@ -33,6 +34,7 @@ fn proportion_to_value(color: Vector3<f64>) -> [u8; 3] {
 
 fn get_ray_color(
     scene: &Scene,
+    rng: &mut ThreadRng,
     global_distr: &dyn DistributionTooling,
     ray: &Ray,
     depth: u32,
@@ -46,7 +48,7 @@ fn get_ray_color(
             let intersection_point = ray.point + ray.direction * intersection.ts[0];
             match &primitive.material {
                 scene::Material::DIFFUSE => {
-                    let w = global_distr.sample(&intersection_point, &intersection.normals[0]);
+                    let w = global_distr.sample(rng, &intersection_point, &intersection.normals[0]);
 
                     let pdf = global_distr.pdf(&intersection_point, &intersection.normals[0], &w);
 
@@ -54,6 +56,7 @@ fn get_ray_color(
                         primitive.emission
                             + (primitive.color / PI).component_mul(&get_ray_color(
                                 scene,
+                                rng,
                                 global_distr,
                                 &build_shifted_ray(intersection_point, w),
                                 depth + 1,
@@ -65,9 +68,12 @@ fn get_ray_color(
                 }
                 scene::Material::METALLIC => {
                     let reflected_direction = ray.direction
-                        - 2.0 * intersection.normals[0].dot(&ray.direction) * intersection.normals[0];
+                        - 2.0
+                            * intersection.normals[0].dot(&ray.direction)
+                            * intersection.normals[0];
                     primitive.color.component_mul(&get_ray_color(
                         scene,
+                        rng,
                         global_distr,
                         &build_shifted_ray(intersection_point, reflected_direction),
                         depth + 1,
@@ -89,6 +95,7 @@ fn get_ray_color(
                     let reflected_coef = r_0 + (1.0 - r_0) * (1.0 - cos_tetta_1).powi(5);
                     let reflected_color = get_ray_color(
                         scene,
+                        rng,
                         global_distr,
                         &build_shifted_ray(intersection_point, reflected_dir),
                         depth + 1,
@@ -99,6 +106,7 @@ fn get_ray_color(
                             + (nu_1 / nu_2 * cos_tetta_1 - cos_tetta_2) * intersection.normals[0];
                         let refracted_color = get_ray_color(
                             scene,
+                            rng,
                             global_distr,
                             &build_shifted_ray(intersection_point, refracted_dir),
                             depth + 1,
@@ -139,31 +147,32 @@ pub fn render_scene(scene: &Scene) -> Vec<u8> {
         ],
     };
 
-    (0..scene.height)
-        .flat_map(move |row| {
-            (0..scene.width).flat_map(move |column| {
-                let x_local = column as f64 + 0.5;
-                let y_local = row as f64 + 0.5;
-                let x_global =
-                    (2.0 * x_local / scene.width as f64 - 1.0) * (scene.camera.fov_x / 2.0).tan();
-                let y_global = (2.0 * y_local / scene.height as f64 - 1.0)
-                    * (scene.camera.fov_y / 2.0).tan()
-                    * (-1.0); // to reverse y asix
-                let ray = Ray {
-                    point: scene.camera.position,
-                    direction: x_global * scene.camera.right_axis
-                        + y_global * scene.camera.up_axis
-                        + scene.camera.forward_axis,
-                };
+    let mut rng = rand::thread_rng();
+    let mut result = Vec::<u8>::new();
+    for row in 0..scene.height {
+        for column in 0..scene.width {
+            let x_local = column as f64 + 0.5;
+            let y_local = row as f64 + 0.5;
+            let x_global =
+                (2.0 * x_local / scene.width as f64 - 1.0) * (scene.camera.fov_x / 2.0).tan();
+            let y_global = (2.0 * y_local / scene.height as f64 - 1.0)
+                * (scene.camera.fov_y / 2.0).tan()
+                * (-1.0); // to reverse y asix
+            let ray = Ray {
+                point: scene.camera.position,
+                direction: x_global * scene.camera.right_axis
+                    + y_global * scene.camera.up_axis
+                    + scene.camera.forward_axis,
+            };
 
-                let mut sum_pixel_color: Vector3<f64> = Default::default();
-                for _ in 0..scene.samples {
-                    sum_pixel_color += get_ray_color(scene, global_distr, &ray, 0);
-                }
-                sum_pixel_color /= scene.samples as f64;
+            let mut sum_pixel_color: Vector3<f64> = Default::default();
+            for _ in 0..scene.samples {
+                sum_pixel_color += get_ray_color(scene, &mut rng, global_distr, &ray, 0);
+            }
+            sum_pixel_color /= scene.samples as f64;
 
-                proportion_to_value(sum_pixel_color)
-            })
-        })
-        .collect()
+            result.extend(proportion_to_value(sum_pixel_color))
+        }
+    }
+    result
 }
