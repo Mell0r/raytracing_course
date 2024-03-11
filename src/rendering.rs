@@ -1,12 +1,16 @@
 use std::f64::consts::PI;
+use std::f64::EPSILON;
 
 use nalgebra::Vector3;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 
+use crate::distribution::CosineWeightedDistr;
 use crate::distribution::DistributionTooling;
 use crate::distribution::LightSourceDistr;
 use crate::distribution::MixDistr;
+use crate::geometry::Intersection;
+use crate::geometry::Shape;
 use crate::geometry::Shape::Plane;
 use crate::geometry::{build_shifted_ray, intersect_scene, Ray};
 use crate::scene::{self, Scene};
@@ -41,7 +45,7 @@ fn proportion_to_value(color: Vector3<f64>) -> [u8; 3] {
 
 //     let pdf = global_distr.pdf(&intersection_point, &intersection.normals[0], &w);
 
-//     if pdf < 0.0 {
+//     if pdf < EPSILON || pdf.is_nan() {
 //         gen_w_and_pdf(global_distr, rng, intersection_point, intersection)
 //     } else {
 //         (w, pdf)
@@ -64,11 +68,12 @@ fn get_ray_color(
             let intersection_point = ray.point + ray.direction * intersection.ts[0];
             match &primitive.material {
                 scene::Material::DIFFUSE => {
-                    let w = global_distr.sample(rng, &intersection_point, &intersection.normals[0]);
+                    let shifted_point = intersection_point + 0.0001 * ray.direction;
+                    let w = global_distr.sample(rng, &shifted_point, &intersection.normals[0]);
 
-                    let pdf = global_distr.pdf(&intersection_point, &intersection.normals[0], &w);
+                    let pdf = global_distr.pdf(&shifted_point, &intersection.normals[0], &w);
 
-                    if pdf <= 0.0 || w.dot(&intersection.normals[0]) <= 0.0 {
+                    if pdf <= EPSILON || w.dot(&intersection.normals[0]) <= EPSILON {
                         primitive.emission
                     } else {
                         primitive.emission
@@ -144,7 +149,7 @@ fn get_ray_color(
 pub fn render_scene(scene: &Scene) -> Vec<u8> {
     let global_distr = &MixDistr {
         distribs: vec![
-            // Box::new(CosineWeightedDistr {}),
+            Box::new(CosineWeightedDistr {}),
             Box::new(MixDistr {
                 distribs: scene
                     .primitives

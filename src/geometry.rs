@@ -154,7 +154,15 @@ pub fn intersect_primitive(ray: &Ray, primitive: &Primitive) -> Option<Intersect
             .transform_vector(&ray.direction),
     };
 
-    intersect_shape(&ray_to_intersect, &primitive.shape)
+    intersect_shape(&ray_to_intersect, &primitive.shape).map(|intersection| Intersection {
+        outside: intersection.outside,
+        ts: intersection.ts,
+        normals: intersection
+            .normals
+            .iter()
+            .map(|normal| primitive.rotation.transform_vector(normal))
+            .collect(), 
+    })
 }
 
 pub fn intersect_scene<'a>(
@@ -166,31 +174,7 @@ pub fn intersect_scene<'a>(
         .primitives
         .iter()
         .filter_map(|primitive| {
-            let moved_ray_point = ray.point - primitive.position;
-            let ray_to_intersect = Ray {
-                point: primitive
-                    .rotation
-                    .conjugate()
-                    .transform_vector(&moved_ray_point),
-                direction: primitive
-                    .rotation
-                    .conjugate()
-                    .transform_vector(&ray.direction),
-            };
-            intersect_shape(&ray_to_intersect, &primitive.shape).map(|intersection| {
-                (
-                    Intersection {
-                        ts: intersection.ts,
-                        normals: intersection
-                            .normals
-                            .iter()
-                            .map(|&normal| primitive.rotation.transform_vector(&normal))
-                            .collect(),
-                        outside: intersection.outside,
-                    },
-                    primitive,
-                )
-            })
+            intersect_primitive(&ray, &primitive).map(|intersection| (intersection, primitive))
         })
         .min_by(|x, y| {
             x.0.ts[0]

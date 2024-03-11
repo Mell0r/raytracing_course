@@ -1,4 +1,4 @@
-use std::{f64::consts::PI, iter::zip};
+use std::{f64::EPSILON, f64::consts::PI, iter::zip};
 
 use nalgebra::Vector3;
 use rand::{rngs::ThreadRng, seq::SliceRandom, Rng};
@@ -45,7 +45,7 @@ impl DistributionTooling for CosineWeightedDistr {
         _point_from: &Vector3<f64>,
         normal_from: &Vector3<f64>,
     ) -> Vector3<f64> {
-        (generate_unit_on_sphere(rng) + normal_from).normalize()
+        (generate_unit_on_sphere(rng) + normal_from * (1.0 + EPSILON)).normalize()
     }
 
     fn pdf(
@@ -161,12 +161,16 @@ impl DistributionTooling for MixDistr {
         &self,
         rng: &mut ThreadRng,
         point_from: &Vector3<f64>,
-        normal: &Vector3<f64>,
+        normal_from: &Vector3<f64>,
     ) -> Vector3<f64> {
         self.distribs
             .choose(rng)
             .expect("Empty distribution vector in mixed distribution.")
-            .sample(rng, point_from, normal)
+            .sample(rng, point_from, normal_from)
+
+        // let n = self.distribs.len();
+        // let rand_idx = rng.gen_range(0..n);
+        // self.distribs[rand_idx].sample(rng, point_from, normal_from)
     }
 
     fn pdf(&self, point_from: &Vector3<f64>, normal: &Vector3<f64>, dir: &Vector3<f64>) -> f64 {
