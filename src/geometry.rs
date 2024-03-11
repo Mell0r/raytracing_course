@@ -141,6 +141,22 @@ pub fn intersect_shape(ray: &Ray, shape: &Shape) -> Option<Intersection> {
     }
 }
 
+pub fn intersect_primitive(ray: &Ray, primitive: &Primitive) -> Option<Intersection> {
+    let moved_ray_point = ray.point - primitive.position;
+    let ray_to_intersect = Ray {
+        point: primitive
+            .rotation
+            .conjugate()
+            .transform_vector(&moved_ray_point),
+        direction: primitive
+            .rotation
+            .conjugate()
+            .transform_vector(&ray.direction),
+    };
+
+    intersect_shape(&ray_to_intersect, &primitive.shape)
+}
+
 pub fn intersect_scene<'a>(
     ray: &Ray,
     scene: &'a Scene,

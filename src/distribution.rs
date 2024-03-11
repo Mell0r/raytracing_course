@@ -4,7 +4,7 @@ use nalgebra::Vector3;
 use rand::{rngs::ThreadRng, seq::SliceRandom, Rng};
 
 use crate::{
-    geometry::{intersect_shape, Ray, Shape},
+    geometry::{intersect_primitive, Ray, Shape},
     scene::Primitive,
 };
 
@@ -109,17 +109,12 @@ impl DistributionTooling for LightSourceDistr {
         _normal_from: &Vector3<f64>,
         direction: &Vector3<f64>,
     ) -> f64 {
-        let Some(intersection) = intersect_shape(
+        let Some(intersection) = intersect_primitive(
             &Ray {
                 point: *point_from,
-                direction: *direction, // self
-                                       //     .primitive
-                                       //     .rotation
-                                       //     .conjugate()
-                                       //     .transform_vector(&direction)
-                                       //     - self.primitive.position,
+                direction: *direction,
             },
-            &self.primitive.shape,
+            &self.primitive,
         ) else {
             return 0.0;
         };

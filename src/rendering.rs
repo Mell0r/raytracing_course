@@ -4,11 +4,9 @@ use nalgebra::Vector3;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 
-use crate::distribution::CosineWeightedDistr;
 use crate::distribution::DistributionTooling;
 use crate::distribution::LightSourceDistr;
 use crate::distribution::MixDistr;
-use crate::geometry::Intersection;
 use crate::geometry::Shape::Plane;
 use crate::geometry::{build_shifted_ray, intersect_scene, Ray};
 use crate::scene::{self, Scene};
@@ -146,7 +144,7 @@ fn get_ray_color(
 pub fn render_scene(scene: &Scene) -> Vec<u8> {
     let global_distr = &MixDistr {
         distribs: vec![
-            Box::new(CosineWeightedDistr {}),
+            // Box::new(CosineWeightedDistr {}),
             Box::new(MixDistr {
                 distribs: scene
                     .primitives
