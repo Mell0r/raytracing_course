@@ -9,39 +9,18 @@ use crate::{
 };
 
 pub trait DistributionTooling {
-    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, normal_from: &Vector3<f64>) -> Vector3<f64>;
+    fn sample(
+        &self,
+        rng: &mut ThreadRng,
+        point_from: &Vector3<f64>,
+        normal_from: &Vector3<f64>,
+    ) -> Vector3<f64>;
     fn pdf(
         &self,
         point_from: &Vector3<f64>,
         normal_from: &Vector3<f64>,
         direction: &Vector3<f64>,
     ) -> f64;
-}
-
-pub struct CosineWeightedDistr {}
-
-impl DistributionTooling for CosineWeightedDistr {
-    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, normal_from: &Vector3<f64>) -> Vector3<f64> {
-        let direction = Vector3::<f64>::new(
-            rng.gen_range(-1.0..1.0),
-            rng.gen_range(-1.0..1.0),
-            rng.gen_range(-1.0..1.0),
-        );
-        if direction.norm() > 1.0 {
-            self.sample(rng, point_from, normal_from)
-        } else {
-            (direction.normalize() + normal_from).normalize()
-        }
-    }
-
-    fn pdf(
-        &self,
-        _point_from: &Vector3<f64>,
-        normal_from: &Vector3<f64>,
-        direction: &Vector3<f64>,
-    ) -> f64 {
-        f64::max(0.0, direction.dot(normal_from) / PI)
-    }
 }
 
 pub fn generate_unit_on_sphere(rng: &mut ThreadRng) -> Vector3<f64> {
@@ -57,12 +36,39 @@ pub fn generate_unit_on_sphere(rng: &mut ThreadRng) -> Vector3<f64> {
     }
 }
 
+pub struct CosineWeightedDistr {}
+
+impl DistributionTooling for CosineWeightedDistr {
+    fn sample(
+        &self,
+        rng: &mut ThreadRng,
+        _point_from: &Vector3<f64>,
+        normal_from: &Vector3<f64>,
+    ) -> Vector3<f64> {
+        (generate_unit_on_sphere(rng) + normal_from).normalize()
+    }
+
+    fn pdf(
+        &self,
+        _point_from: &Vector3<f64>,
+        normal_from: &Vector3<f64>,
+        direction: &Vector3<f64>,
+    ) -> f64 {
+        f64::max(0.0, direction.normalize().dot(normal_from) / PI)
+    }
+}
+
 pub struct LightSourceDistr {
     pub primitive: Primitive,
 }
 
 impl DistributionTooling for LightSourceDistr {
-    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, _normal_from: &Vector3<f64>) -> Vector3<f64> {
+    fn sample(
+        &self,
+        rng: &mut ThreadRng,
+        point_from: &Vector3<f64>,
+        _normal_from: &Vector3<f64>,
+    ) -> Vector3<f64> {
         let mut generate_rand_local_point = || -> Vector3<f64> {
             match self.primitive.shape {
                 Shape::Plane { normal: _ } => Default::default(),
@@ -156,7 +162,12 @@ pub struct MixDistr {
 }
 
 impl DistributionTooling for MixDistr {
-    fn sample(&self, rng: &mut ThreadRng, point_from: &Vector3<f64>, normal: &Vector3<f64>) -> Vector3<f64> {
+    fn sample(
+        &self,
+        rng: &mut ThreadRng,
+        point_from: &Vector3<f64>,
+        normal: &Vector3<f64>,
+    ) -> Vector3<f64> {
         self.distribs
             .choose(rng)
             .expect("Empty distribution vector in mixed distribution.")
@@ -164,10 +175,10 @@ impl DistributionTooling for MixDistr {
     }
 
     fn pdf(&self, point_from: &Vector3<f64>, normal: &Vector3<f64>, dir: &Vector3<f64>) -> f64 {
-        let pdfs = self
-            .distribs
+        self.distribs
             .iter()
-            .map(|distr| distr.pdf(point_from, normal, dir));
-        pdfs.sum::<f64>() / self.distribs.len() as f64
+            .map(|distr| distr.pdf(point_from, normal, dir))
+            .sum::<f64>()
+            / self.distribs.len() as f64
     }
 }

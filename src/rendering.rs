@@ -8,6 +8,7 @@ use crate::distribution::CosineWeightedDistr;
 use crate::distribution::DistributionTooling;
 use crate::distribution::LightSourceDistr;
 use crate::distribution::MixDistr;
+use crate::geometry::Intersection;
 use crate::geometry::Shape::Plane;
 use crate::geometry::{build_shifted_ray, intersect_scene, Ray};
 use crate::scene::{self, Scene};
@@ -32,6 +33,23 @@ fn proportion_to_value(color: Vector3<f64>) -> [u8; 3] {
     ]
 }
 
+// fn gen_w_and_pdf(
+//     global_distr: &dyn DistributionTooling,
+//     rng: &mut ThreadRng,
+//     intersection_point: &Vector3<f64>,
+//     intersection: &Intersection,
+// ) -> (Vector3<f64>, f64) {
+//     let w = global_distr.sample(rng, intersection_point, &intersection.normals[0]);
+
+//     let pdf = global_distr.pdf(&intersection_point, &intersection.normals[0], &w);
+
+//     if pdf < 0.0 {
+//         gen_w_and_pdf(global_distr, rng, intersection_point, intersection)
+//     } else {
+//         (w, pdf)
+//     }
+// }
+
 fn get_ray_color(
     scene: &Scene,
     rng: &mut ThreadRng,
@@ -52,7 +70,9 @@ fn get_ray_color(
 
                     let pdf = global_distr.pdf(&intersection_point, &intersection.normals[0], &w);
 
-                    if pdf > 0.0 {
+                    if pdf <= 0.0 || w.dot(&intersection.normals[0]) <= 0.0 {
+                        primitive.emission
+                    } else {
                         primitive.emission
                             + (primitive.color / PI).component_mul(&get_ray_color(
                                 scene,
@@ -62,8 +82,6 @@ fn get_ray_color(
                                 depth + 1,
                             )) * (w.dot(&intersection.normals[0]))
                                 / pdf
-                    } else {
-                        BLACK
                     }
                 }
                 scene::Material::METALLIC => {
@@ -165,11 +183,10 @@ pub fn render_scene(scene: &Scene) -> Vec<u8> {
                     + scene.camera.forward_axis,
             };
 
-            let mut sum_pixel_color: Vector3<f64> = Default::default();
-            for _ in 0..scene.samples {
-                sum_pixel_color += get_ray_color(scene, &mut rng, global_distr, &ray, 0);
-            }
-            sum_pixel_color /= scene.samples as f64;
+            let sum_pixel_color = (0..scene.samples)
+                .map(|_| get_ray_color(scene, &mut rng, global_distr, &ray, 0))
+                .sum::<Vector3<f64>>()
+                / scene.samples as f64;
 
             result.extend(proportion_to_value(sum_pixel_color))
         }
